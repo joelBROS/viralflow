@@ -1,0 +1,9 @@
+{
+  "name":"ViralFlow V11 - TikTok Auto Video",
+  "nodes":[
+    {"parameters":{"path":"viralflow","httpMethod":"POST","responseMode":"lastNode"},"id":"1","name":"Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]},
+    {"parameters":{"command":"python -m app.cli --topic \"{{$json.topic || 'L’homme qui a survécu à deux bombes nucléaires'}}\""},"id":"2","name":"Build Video","type":"n8n-nodes-base.executeCommand","typeVersion":1,"position":[260,0]},
+    {"parameters":{"respondWith":"json","responseBody":"={\"ok\":true,\"result\":$json.stdout}"},"id":"3","name":"Response","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[520,0]}
+  ],
+  "connections":{"Webhook":{"main":[[{"node":"Build Video","type":"main","index":0}]]},"Build Video":{"main":[[{"node":"Response","type":"main","index":0}]]}}
+}
