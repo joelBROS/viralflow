@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import os
 import threading
 from fastapi import FastAPI, Request, HTTPException
@@ -8,6 +9,7 @@ app = FastAPI(title='ViralFlow V12')
 TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '').strip()
 SECRET = os.getenv('TELEGRAM_WEBHOOK_SECRET', '').strip()
 API = f'https://api.telegram.org/bot{TOKEN}' if TOKEN else ''
+GENERATION_LOCK = threading.Lock()
 
 
 def tg(method: str, payload: dict):
@@ -33,15 +35,21 @@ def send_video(chat_id, path):
 
 
 def process(chat_id: int, topic: str):
+    if not GENERATION_LOCK.acquire(blocking=False):
+        send_text(chat_id, '⏳ Une autre vidéo est déjà en cours. Attends sa fin puis renvoie ton idée.')
+        return
     try:
-        send_text(chat_id, '⏳ Je construis ta vidéo ViralFlow...\n\nScript → médias → voix → sous-titres → MP4.')
+        send_text(chat_id, '⏳ Je construis ta vidéo ViralFlow...\n\nScript → média → voix → sous-titres → MP4.')
         meta = build(topic)
         send_video(chat_id, meta['video'])
+        send_text(chat_id, '✅ Vidéo terminée.')
     except Exception as e:
         try:
             send_text(chat_id, '❌ Erreur : ' + str(e)[-1000:])
         except Exception:
             pass
+    finally:
+        GENERATION_LOCK.release()
 
 
 @app.get('/')
@@ -60,14 +68,23 @@ async def telegram(request: Request):
         raise HTTPException(503, 'TELEGRAM_BOT_TOKEN is not configured')
     if SECRET and request.headers.get('X-Telegram-Bot-Api-Secret-Token') != SECRET:
         raise HTTPException(403, 'invalid secret')
+
     update = await request.json()
     message = update.get('message') or {}
     chat = (message.get('chat') or {}).get('id')
     text = (message.get('text') or '').strip()
     if not chat or not text:
         return {'ok': True}
+
     if text in ('/start', '/help'):
-        send_text(chat, '🎬 ViralFlow gratuit\n\nEnvoie-moi simplement une idée de vidéo. Je génère le MP4 vertical et je te le renvoie ici.\n\nExemple : L’homme qui a survécu à deux bombes nucléaires')
+        send_text(
+            chat,
+            '🎬 ViralFlow gratuit\n\n'
+            'Envoie-moi simplement une idée de vidéo. '
+            'Je génère le MP4 vertical et je te le renvoie ici.\n\n'
+            'Exemple : L’homme qui a survécu à deux bombes nucléaires'
+        )
         return {'ok': True}
-    threading.Thread(target=process, args=(chat, text), daemon=True).start()
+
+    threading.Thread(target=process, args=(chat, text), daemon=False).start()
     return {'ok': True}
